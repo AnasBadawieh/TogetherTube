@@ -64,4 +64,9 @@ show live users by different Token(One for me and one for Ece)
 https://www.youtube.com/watch?v=YhA0TVZwnPQ&ab_channel=JayJay2005  |    https://www.youtube.com/embed/YhA0TVZwnPQ
 
 
-label sayign changed or error or somethign else, 
+label sayign changed or error or somethign else
+
+save last video url and keep showing along with it's data so if everyone leaves it ccould still keep going kind of
+
+
+now both of them start when link is added from two different sites, weird

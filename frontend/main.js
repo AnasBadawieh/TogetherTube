@@ -1,52 +1,93 @@
 // frontend/main.js
 const socket = io();
 let player;
+let currentVideoId = null;
+
+function getYouTubeEmbedLink(url) {
+    if (!url) {
+        console.error('Invalid URL');
+        return null;
+    }
+    const videoId = url.split('v=')[1];
+    if (!videoId) {
+        console.error('Invalid YouTube URL');
+        return null;
+    }
+    const ampersandPosition = videoId.indexOf('&');
+    if (ampersandPosition !== -1) {
+        return videoId.substring(0, ampersandPosition);
+    }
+    return videoId;
+}
 
 function onYouTubeIframeAPIReady() {
-  player = new YT.Player('player', {
-    events: {
-      onStateChange: onPlayerStateChange,
-      onError: onPlayerError,
-    },
-  });
+    player = new YT.Player('player', {
+        height: '390',
+        width: '640',
+        events: {
+            'onStateChange': onPlayerStateChange,
+            'onError': onPlayerError
+        }
+    });
 }
 
 function onPlayerStateChange(event) {
-  // Handle player state changes if needed
+    if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.ENDED) {
+        const currentTime = player.getCurrentTime();
+        saveVideoState(currentVideoId, currentTime);
+    }
 }
 
 function onPlayerError(event) {
-  console.error('YouTube Player Error:', event);
+    console.error('Error occurred:', event);
 }
 
 document.getElementById('loadVideo').addEventListener('click', () => {
-  const url = document.getElementById('videoUrl').value;
-  const embedLink = getYouTubeEmbedLink(url);
-  console.log(embedLink);
-
-  if (embedLink.startsWith('https://www.youtube.com/embed/')) {
-    const videoId = embedLink.split('/embed/')[1];
-    if (player && typeof player.loadVideoById === 'function') {
-      player.loadVideoById(videoId);
-      socket.emit('update-video', { url: embedLink, timestamp: 0, isPlaying: true });
-    } else {
-      console.error('YouTube Player is not initialized');
+    const url = document.getElementById('videoUrl').value;
+    const videoId = getYouTubeEmbedLink(url);
+    if (videoId) {
+        currentVideoId = videoId;
+        player.loadVideoById(videoId);
+        saveVideoState(videoId, 0);
     }
-  } else {
-    console.error(embedLink); // Log the error message from getYouTubeEmbedLink
-  }
 });
 
+function saveVideoState(videoId, currentTime) {
+    fetch('/api/videoState', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ videoId, currentTime })
+    });
+}
+
+window.onload = () => {
+    fetch('/api/videoState')
+        .then(response => response.json())
+        .then(data => {
+            if (data && data.videoId) {
+                currentVideoId = data.videoId;
+                player.loadVideoById(data.videoId, data.currentTime);
+            } else {
+                console.log('No video data found in the database.');
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching video state:', error);
+        });
+};
+
 socket.on('video-state', (data) => {
-  if (data.url) {
-    const videoId = new URL(data.url).searchParams.get('v');
-    if (player && typeof player.loadVideoById === 'function') {
-      player.loadVideoById(videoId, data.timestamp);
-      if (data.isPlaying) {
-        player.playVideo();
-      } else {
-        player.pauseVideo();
-      }
+    if (data.url) {
+        const videoId = new URL(data.url).searchParams.get('v');
+        if (player && typeof player.loadVideoById === 'function') {
+            player.loadVideoById(videoId, data.timestamp);
+            if (data.isPlaying) {
+                player.playVideo();
+            } else {
+                player.pauseVideo();
+            }
+        }
     }
-  }
 });
