@@ -1,0 +1,34 @@
+<!-- frontend/login.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Login</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <form id="loginForm">
+    <h1>Login</h1>
+    <input type="text" id="token" placeholder="Enter Token" required />
+    <button type="submit">Login</button>
+  </form>
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const token = document.getElementById('token').value;
+      const response = await fetch('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      if (response.ok) {
+        const { token: jwtToken } = await response.json();
+        localStorage.setItem('jwtToken', jwtToken);
+        window.location.href = 'index.html';
+      } else {
+        alert('Invalid Token');
+      }
+    });
+  </script>
+</body>
+</html>
