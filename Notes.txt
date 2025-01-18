@@ -1,0 +1,61 @@
+Project Idea: Synchronized Video Streaming Platform
+
+Objective:
+Develop a website that provides a synchronized video streaming experience for multiple users. The website should allow users to log in using a secure TOKEN authentication method and share a common video player that stays synchronized in real-time.
+
+Key Features:
+
+Login Authentication:
+
+On opening the website, users are greeted with a login page.
+Users must enter a valid TOKEN to proceed (managed securely using an .env file).
+Main Page Functionality:
+
+Once authenticated, the website displays:
+A YouTube Player API.
+A textbox labeled "Insert The URL Here" for users to input an embedded YouTube video URL.
+The YouTube player loads the input video and plays it for all users in sync.
+Synchronization:
+
+The video player ensures real-time synchronization:
+If User A inputs a YouTube URL and starts watching, other users who log in will join the same video at the same progress point.
+Video progress, play/pause states, and other playback controls should sync for all active users.
+Technologies to Use:
+
+Frontend:
+Basic HTML, CSS, and JavaScript to create a simple and user-friendly interface.
+
+Backend:
+Node.js for handling:
+
+Authentication.
+Synchronization logic.
+Real-time communication.
+Database:
+MongoDB to store:
+
+User information.
+Current video data and playback state.
+Real-Time Communication:
+Use WebSocket (e.g., Socket.IO) for real-time updates and synchronization of video states among users.
+
+Environment Variables:
+Use an .env file to securely manage:
+
+Authentication TOKENs.
+MongoDB URI.
+Example Use Case:
+
+Scenario:
+User A logs in and inserts a YouTube URL to watch a video.
+The video starts playing on the YouTube player for User A.
+5 minutes later, User B logs in. User B’s YouTube player automatically joins the same video at the current playback progress.
+Both users watch the video together in sync.
+
+
+
+
+
+
+add search by using youtube data api (web scrab alternative)
+show live users by different Token(One for me and one for Ece)
