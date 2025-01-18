@@ -33,6 +33,8 @@ app.use(cookieParser());
 //   next();
 // });
 
+app.use('/favicon.ico', express.static(path.join(__dirname, '../frontend/favicon.ico')));
+
 
 app.use('/auth', authRoutes);
 
