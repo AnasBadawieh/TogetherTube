@@ -3,17 +3,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Video Sync</title>
-  <script src="https://cdn.socket.io/4.3.2/socket.io.min.js"></script>
-  <script src="https://www.youtube.com/iframe_api"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div>
-    <input type="text" id="videoUrl" placeholder="Insert the URL here" />
+    <input type="text" id="videoUrl" placeholder="Enter YouTube URL">
     <button id="loadVideo">Load Video</button>
   </div>
   <div id="player"></div>
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="/socket.io/socket.io.js"></script> <!-- Add this line -->
+  <script src="linkExtrcat.js"></script>
   <script src="main.js"></script>
 </body>
 </html>

@@ -8,7 +8,7 @@ const jwt = require('jsonwebtoken');
 const VideoState = require('./models/VideoState');
 const authRoutes = require('./routes/auth');
 const path = require('path');
-
+const cookieParser = require('cookie-parser');
 
 const app = express();
 const server = http.createServer(app);
@@ -17,13 +17,23 @@ const io = new Server(server);
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
-});.then(() => {
+}).then(() => {
   console.log('Connected to MongoDB');
 }).catch((err) => {
   console.error(err);
 });
 
 app.use(express.json());
+app.use(cookieParser());
+
+// Set SameSite attribute for cookies
+// Remove the cookie-setting middleware if not needed
+// app.use((req, res, next) => {
+//   res.cookie('yourCookieName', 'yourCookieValue', { sameSite: 'Strict' });
+//   next();
+// });
+
+
 app.use('/auth', authRoutes);
 
 // Serve frontend
@@ -49,6 +59,5 @@ io.on('connection', (socket) => {
 });
 
 server.listen(3000, () => {
-    console.log('Visit http://localhost:3000');
+  console.log('Server is running on port 3000');
 });
-
