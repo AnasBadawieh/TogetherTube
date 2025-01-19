@@ -43,21 +43,49 @@ app.use('/auth', authRoutes);
 app.use(express.static(path.join(__dirname, '../frontend')));
 
 let videoState = {};
+let previousVideoId = null;
+let previousTime = null;
 
-// Sync logic
 io.on('connection', (socket) => {
-    console.log('A user connected');
+    console.log('Client connected');
 
-    // Emit current video state to the newly connected user
-    socket.emit('video-state', videoState);
+    socket.on('videoState', (data) => {
+        try {
+            // Update video state
+            videoState = { ...data };
+            
+            // Add logging based on type
+            if (data.type === 'pause') {
+                socket.broadcast.emit('videoStateLog', `Video paused at ${Math.floor(data.currentTime)}s`);
+            } else if (data.type === 'play') {
+                socket.broadcast.emit('videoStateLog', `Video continued at ${Math.floor(data.currentTime)}s`);
+            }
+            
+            // Check if video changed
+            if (previousVideoId && previousVideoId !== data.videoId) {
+                socket.broadcast.emit('videoStateLog', `Video changed to: ${data.videoId}`);
+                console.log('Video changed to:', data.videoId);
+            }
+            
+            // Check for significant time changes (>3s difference)
+            if (previousTime && Math.abs(previousTime - data.currentTime) > 3) {
+                socket.broadcast.emit('videoStateLog', `Time changed to ${Math.floor(data.currentTime)}s`);
+            }
+            
+            // Store previous states
+            previousVideoId = data.videoId;
+            previousTime = data.currentTime;
 
-    socket.on('update-video', (data) => {
-        videoState = data;
-        io.emit('video-state', videoState);
+            // Broadcast to other clients
+            socket.broadcast.emit('videoStateUpdate', videoState);
+            console.log('Broadcasting videoStateUpdate:', videoState);
+        } catch (error) {
+            console.error('Error processing video state:', error);
+        }
     });
 
     socket.on('disconnect', () => {
-        console.log('A user disconnected');
+        console.log('Client disconnected');
     });
 });
 

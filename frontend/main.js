@@ -2,6 +2,7 @@
 const socket = io();
 let player;
 let currentVideoId = null;
+let isPlayerReady = false;
 
 function getYouTubeEmbedLink(url) {
     if (!url) {
@@ -24,24 +25,35 @@ function onYouTubeIframeAPIReady() {
     player = new YT.Player('player', {
         height: '390',
         width: '640',
+        videoId: '', // Start with empty video
         events: {
+            'onReady': onPlayerReady,
             'onStateChange': onPlayerStateChange,
             'onError': onPlayerError
         }
     });
+}
 
-    // Fetch video state after player is ready
+function onPlayerReady(event) {
+    isPlayerReady = true;
     fetchVideoState();
 }
 
 function onPlayerStateChange(event) {
     const currentTime = player.getCurrentTime();
     if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.ENDED) {
-        saveVideoState(currentVideoId, currentTime, false);
-        socket.emit('update-video', { videoId: currentVideoId, currentTime, isPlaying: false });
+        socket.emit('videoState', {
+            videoId: currentVideoId,
+            currentTime: currentTime,
+            isPlaying: false,
+            type: 'pause' // Add type for logging
+        });
     } else if (event.data === YT.PlayerState.PLAYING) {
-        saveVideoState(currentVideoId, currentTime, true);
-        socket.emit('update-video', { videoId: currentVideoId, currentTime, isPlaying: true });
+        socket.emit('videoState', {
+            type: 'play',
+            currentTime: player.getCurrentTime(),
+            videoId: player.getVideoData().video_id
+        });
     }
 }
 
@@ -59,12 +71,12 @@ function saveVideoState(videoId, currentTime, isPlaying) {
     });
 }
 
-function isPlayerReady() {
+function isPlayerLoaded() {
     return player && typeof player.loadVideoById === 'function';
 }
 
 function fetchVideoState(Try = 20) {
-    if (isPlayerReady()) {
+    if (isPlayerLoaded()) {
         fetch('/api/videoState')
             .then(response => response.json())
             .then(data => {
@@ -111,4 +123,25 @@ socket.on('video-state', (data) => {
             player.pauseVideo();
         }
     }
+});
+
+// Socket events
+socket.on('videoStateUpdate', (data) => {
+    if (!isPlayerReady) return;
+    
+    if (data.videoId !== currentVideoId) {
+        loadVideo(data.videoId, data.currentTime);
+    } else {
+        if (data.isPlaying) {
+            player.seekTo(data.currentTime);
+            player.playVideo();
+        } else {
+            player.pauseVideo();
+        }
+    }
+});
+
+// Add socket listeners for logs
+socket.on('videoStateLog', (message) => {
+    console.log(`[TogetherTube] ${message}`);
 });
