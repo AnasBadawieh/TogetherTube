@@ -29,6 +29,9 @@ function onYouTubeIframeAPIReady() {
             'onError': onPlayerError
         }
     });
+
+    // Fetch video state after player is ready
+    fetchVideoState();
 }
 
 function onPlayerStateChange(event) {
@@ -42,16 +45,6 @@ function onPlayerError(event) {
     console.error('Error occurred:', event);
 }
 
-document.getElementById('loadVideo').addEventListener('click', () => {
-    const url = document.getElementById('videoUrl').value;
-    const videoId = getYouTubeEmbedLink(url);
-    if (videoId) {
-        currentVideoId = videoId;
-        player.loadVideoById(videoId);
-        saveVideoState(videoId, 0);
-    }
-});
-
 function saveVideoState(videoId, currentTime) {
     fetch('/api/videoState', {
         method: 'POST',
@@ -62,21 +55,41 @@ function saveVideoState(videoId, currentTime) {
     });
 }
 
-window.onload = () => {
-    fetch('/api/videoState')
-        .then(response => response.json())
-        .then(data => {
-            if (data && data.videoId) {
-                currentVideoId = data.videoId;
-                player.loadVideoById(data.videoId, data.currentTime);
-            } else {
-                console.log('No video data found in the database.');
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching video state:', error);
-        });
-};
+function isPlayerReady() {
+    return player && typeof player.loadVideoById === 'function';
+}
+
+function fetchVideoState(retries = 20) {
+    if (isPlayerReady()) {
+        fetch('/api/videoState')
+            .then(response => response.json())
+            .then(data => {
+                if (data && data.videoId) {
+                    currentVideoId = data.videoId;
+                    player.loadVideoById(data.videoId, data.currentTime);
+                } else {
+                    console.log('No video data found in the database.');
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching video state:', error);
+            });
+    } else if (retries > 0) {
+        setTimeout(() => fetchVideoState(retries - 1), 2000);
+    } else {
+        console.error('Player is not ready after multiple attempts.');
+    }
+}
+
+document.getElementById('loadVideo').addEventListener('click', () => {
+    const url = document.getElementById('videoUrl').value;
+    const videoId = getYouTubeEmbedLink(url);
+    if (videoId) {
+        currentVideoId = videoId;
+        player.loadVideoById(videoId);
+        saveVideoState(videoId, 0);
+    }
+});
 
 socket.on('video-state', (data) => {
     if (data.url) {

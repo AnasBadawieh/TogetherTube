@@ -70,3 +70,5 @@ save last video url and keep showing along with it's data so if everyone leaves 
 
 
 now both of them start when link is added from two different sites, weird
+
+socket.id for token ece for online or offline
