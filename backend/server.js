@@ -46,30 +46,30 @@ let videoState = {};
 
 // Sync logic
 io.on('connection', (socket) => {
-  console.log('A user connected');
+    console.log('A user connected');
 
-  // Emit current video state to the newly connected user
-  socket.emit('video-state', videoState);
+    // Emit current video state to the newly connected user
+    socket.emit('video-state', videoState);
 
-  socket.on('update-video', (data) => {
-    videoState = data;
-    io.emit('video-state', videoState);
-  });
+    socket.on('update-video', (data) => {
+        videoState = data;
+        io.emit('video-state', videoState);
+    });
 
-  socket.on('disconnect', () => {
-    console.log('A user disconnected');
-  });
+    socket.on('disconnect', () => {
+        console.log('A user disconnected');
+    });
 });
 
 app.post('/api/videoState', async (req, res) => {
-  const { videoId, currentTime } = req.body;
-  await VideoState.findOneAndUpdate({}, { videoId, currentTime }, { upsert: true });
-  res.sendStatus(200);
+    const { videoId, currentTime, isPlaying } = req.body;
+    await VideoState.findOneAndUpdate({}, { videoId, currentTime, isPlaying }, { upsert: true });
+    res.sendStatus(200);
 });
 
 app.get('/api/videoState', async (req, res) => {
-  const videoState = await VideoState.findOne({});
-  res.json(videoState || {});
+    const videoState = await VideoState.findOne({});
+    res.json(videoState || {});
 });
 
 server.listen(3000, () => {

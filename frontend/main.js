@@ -35,9 +35,13 @@ function onYouTubeIframeAPIReady() {
 }
 
 function onPlayerStateChange(event) {
+    const currentTime = player.getCurrentTime();
     if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.ENDED) {
-        const currentTime = player.getCurrentTime();
-        saveVideoState(currentVideoId, currentTime);
+        saveVideoState(currentVideoId, currentTime, false);
+        socket.emit('update-video', { videoId: currentVideoId, currentTime, isPlaying: false });
+    } else if (event.data === YT.PlayerState.PLAYING) {
+        saveVideoState(currentVideoId, currentTime, true);
+        socket.emit('update-video', { videoId: currentVideoId, currentTime, isPlaying: true });
     }
 }
 
@@ -45,13 +49,13 @@ function onPlayerError(event) {
     console.error('Error occurred:', event);
 }
 
-function saveVideoState(videoId, currentTime) {
+function saveVideoState(videoId, currentTime, isPlaying) {
     fetch('/api/videoState', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ videoId, currentTime })
+        body: JSON.stringify({ videoId, currentTime, isPlaying })
     });
 }
 
@@ -59,7 +63,7 @@ function isPlayerReady() {
     return player && typeof player.loadVideoById === 'function';
 }
 
-function fetchVideoState(retries = 20) {
+function fetchVideoState(Try = 20) {
     if (isPlayerReady()) {
         fetch('/api/videoState')
             .then(response => response.json())
@@ -67,6 +71,11 @@ function fetchVideoState(retries = 20) {
                 if (data && data.videoId) {
                     currentVideoId = data.videoId;
                     player.loadVideoById(data.videoId, data.currentTime);
+                    if (data.isPlaying) {
+                        player.playVideo();
+                    } else {
+                        player.pauseVideo();
+                    }
                 } else {
                     console.log('No video data found in the database.');
                 }
@@ -74,8 +83,8 @@ function fetchVideoState(retries = 20) {
             .catch(error => {
                 console.error('Error fetching video state:', error);
             });
-    } else if (retries > 0) {
-        setTimeout(() => fetchVideoState(retries - 1), 2000);
+    } else if (Try > 0) {
+        setTimeout(() => fetchVideoState(Try - 1), 2000);
     } else {
         console.error('Player is not ready after multiple attempts.');
     }
@@ -87,20 +96,19 @@ document.getElementById('loadVideo').addEventListener('click', () => {
     if (videoId) {
         currentVideoId = videoId;
         player.loadVideoById(videoId);
-        saveVideoState(videoId, 0);
+        saveVideoState(videoId, 0, true);
+        socket.emit('update-video', { videoId, currentTime: 0, isPlaying: true });
     }
 });
 
 socket.on('video-state', (data) => {
-    if (data.url) {
-        const videoId = new URL(data.url).searchParams.get('v');
-        if (player && typeof player.loadVideoById === 'function') {
-            player.loadVideoById(videoId, data.timestamp);
-            if (data.isPlaying) {
-                player.playVideo();
-            } else {
-                player.pauseVideo();
-            }
+    if (data.videoId) {
+        currentVideoId = data.videoId;
+        player.loadVideoById(data.videoId, data.currentTime);
+        if (data.isPlaying) {
+            player.playVideo();
+        } else {
+            player.pauseVideo();
         }
     }
 });
