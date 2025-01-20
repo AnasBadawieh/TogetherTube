@@ -52,7 +52,8 @@ function onPlayerStateChange(event) {
         socket.emit('videoState', {
             type: 'play',
             currentTime: player.getCurrentTime(),
-            videoId: player.getVideoData().video_id
+            videoId: player.getVideoData().video_id,
+            isPlaying: true
         });
     }
 }
