@@ -3,6 +3,7 @@ const socket = io();
 let player;
 let currentVideoId = null;
 let isPlayerReady = false;
+let lastSentTime = 0;
 
 function getYouTubeEmbedLink(url) {
     if (!url) {
@@ -58,6 +59,23 @@ function onPlayerStateChange(event) {
     }
 }
 
+// Listen for playback time changes
+function onPlaybackTimeChange() {
+    if (player && typeof player.getCurrentTime === 'function') {
+        const currentTime = player.getCurrentTime();
+        if (Math.abs(currentTime - lastSentTime) > 1) { // Only send if the change is significant
+            lastSentTime = currentTime;
+            socket.emit('timeChange', {
+                videoId: currentVideoId,
+                currentTime: currentTime
+            });
+        }
+    }
+}
+
+// Add event listener for playback time change
+setInterval(onPlaybackTimeChange, 1000); // Check every second
+
 function onPlayerError(event) {
     console.error('Error occurred:', event);
 }
@@ -102,6 +120,13 @@ function fetchVideoState(Try = 20) {
         console.error('Player is not ready after multiple attempts.');
     }
 }
+
+// Listen for time change updates from the server
+socket.on('timeChangeUpdate', (data) => {
+    if (data.videoId === currentVideoId) {
+        player.seekTo(data.currentTime);
+    }
+});
 
 document.getElementById('loadVideo').addEventListener('click', () => {
     const url = document.getElementById('videoUrl').value;
