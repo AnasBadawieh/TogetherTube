@@ -31,11 +31,21 @@ function getCurrentTime() {
 }
 
 io.on('connection', (socket) => {
-  // Send initial state so new clients can sync
-  socket.emit('initState', {
-    videoId: masterState.videoId,
-    isPlaying: masterState.isPlaying,
-    currentTime: getCurrentTime()
+  // Handle request for initial state
+  socket.on('requestInitialState', async () => {
+    const videoState = await VideoState.findOne({});
+    if (videoState) {
+      masterState.videoId = videoState.videoId;
+      masterState.isPlaying = videoState.isPlaying;
+      masterState.lastKnownTime = videoState.currentTime;
+      masterState.startWallClock = Date.now();
+
+      socket.emit('initState', {
+        videoId: masterState.videoId,
+        isPlaying: masterState.isPlaying,
+        currentTime: getCurrentTime()
+      });
+    }
   });
 
   // Handle play event

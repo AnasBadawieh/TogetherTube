@@ -78,6 +78,7 @@ function fetchInitialVideoState() {
 
 // Listen for server events
 socket.on('initState', (data) => {
+    console.log('Received initState:', data); // Log the initState data
     currentVideoId = data.videoId;
     if (data.videoId) {
         loadVideoWithRetry(data.videoId, data.currentTime);
