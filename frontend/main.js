@@ -3,7 +3,6 @@ const socket = io();
 let player;
 let currentVideoId = null;
 let isPlayerReady = false;
-let lastSentTime = 0;
 let playCounter = 0;
 let playInterval;
 
@@ -66,28 +65,6 @@ function onPlayerStateChange(event) {
     }
 }
 
-// Function to send changed time to the backend
-function sendChangedTime(currentTime) {
-    socket.emit('timeChange', {
-        videoId: currentVideoId,
-        currentTime: currentTime
-    });
-}
-
-// Listen for playback time changes
-function onPlaybackTimeChange() {
-    if (player && typeof player.getCurrentTime === 'function') {
-        const currentTime = player.getCurrentTime();
-        if (Math.abs(currentTime - playCounter) > 2 || currentTime < playCounter) { // Detect significant change
-            playCounter = currentTime;
-            sendChangedTime(currentTime);
-        }
-    }
-}
-
-// Add event listener for playback time change
-setInterval(onPlaybackTimeChange, 1000); // Check every second
-
 function onPlayerError(event) {
     console.error('Error occurred:', event);
 }
@@ -135,14 +112,6 @@ function fetchVideoState(Try = 20) {
     }
 }
 
-// Listen for time change updates from the server
-socket.on('timeChangeUpdate', (data) => {
-    if (data.videoId === currentVideoId) {
-        player.seekTo(data.currentTime);
-        playCounter = data.currentTime; // Update the counter to the new time
-    }
-});
-
 document.getElementById('loadVideo').addEventListener('click', () => {
     const url = document.getElementById('videoUrl').value;
     const videoId = getYouTubeEmbedLink(url);
@@ -173,8 +142,11 @@ socket.on('videoStateUpdate', (data) => {
     if (data.videoId !== currentVideoId) {
         loadVideo(data.videoId, data.currentTime);
     } else {
+        const timeOffset = (Date.now() - data.startTime) / 1000;
+        const currentTime = data.startVideoTime + timeOffset;
+
         if (data.isPlaying) {
-            player.seekTo(data.currentTime);
+            player.seekTo(currentTime);
             player.playVideo();
         } else {
             player.pauseVideo();

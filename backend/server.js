@@ -50,8 +50,12 @@ io.on('connection', (socket) => {
 
             if (data.type === 'pause') {
                 socket.broadcast.emit('videoStateLog', `Video paused at ${Math.floor(data.currentTime)}s`);
+                videoState.isPlaying = false;
             } else if (data.type === 'play') {
                 socket.broadcast.emit('videoStateLog', `Video continued at ${Math.floor(data.currentTime)}s`);
+                videoState.isPlaying = true;
+                videoState.startTime = Date.now();
+                videoState.startVideoTime = data.currentTime;
             }
 
             if (previousVideoId && previousVideoId !== data.videoId) {
@@ -71,11 +75,6 @@ io.on('connection', (socket) => {
         } catch (error) {
             console.error('Error processing video state:', error);
         }
-    });
-
-    socket.on('timeChange', (data) => {
-        console.log('Received timeChange:', data);
-        socket.broadcast.emit('timeChangeUpdate', data);
     });
 
     socket.on('disconnect', () => {
