@@ -4,6 +4,8 @@ let player;
 let currentVideoId = null;
 let isPlayerReady = false;
 let lastSentTime = 0;
+let playCounter = 0;
+let playInterval;
 
 function getYouTubeEmbedLink(url) {
     if (!url) {
@@ -43,13 +45,18 @@ function onPlayerReady(event) {
 function onPlayerStateChange(event) {
     const currentTime = player.getCurrentTime();
     if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.ENDED) {
+        clearInterval(playInterval);
         socket.emit('videoState', {
             videoId: currentVideoId,
             currentTime: currentTime,
             isPlaying: false,
-            type: 'pause' // Add type for logging
+            type: 'pause'
         });
     } else if (event.data === YT.PlayerState.PLAYING) {
+        playCounter = currentTime;
+        clearInterval(playInterval); // Clear any existing interval
+        playInterval = setInterval(() => playCounter++, 1000);
+        console.log('Playing:', playCounter);
         socket.emit('videoState', {
             type: 'play',
             currentTime: player.getCurrentTime(),
@@ -59,16 +66,21 @@ function onPlayerStateChange(event) {
     }
 }
 
+// Function to send changed time to the backend
+function sendChangedTime(currentTime) {
+    socket.emit('timeChange', {
+        videoId: currentVideoId,
+        currentTime: currentTime
+    });
+}
+
 // Listen for playback time changes
 function onPlaybackTimeChange() {
     if (player && typeof player.getCurrentTime === 'function') {
         const currentTime = player.getCurrentTime();
-        if (Math.abs(currentTime - lastSentTime) > 1) { // Only send if the change is significant
-            lastSentTime = currentTime;
-            socket.emit('timeChange', {
-                videoId: currentVideoId,
-                currentTime: currentTime
-            });
+        if (Math.abs(currentTime - playCounter) > 2 || currentTime < playCounter) { // Detect significant change
+            playCounter = currentTime;
+            sendChangedTime(currentTime);
         }
     }
 }
@@ -102,8 +114,10 @@ function fetchVideoState(Try = 20) {
                 if (data && data.videoId) {
                     currentVideoId = data.videoId;
                     player.loadVideoById(data.videoId, data.currentTime);
+                    playCounter = data.currentTime; // Start the counter from the current time
                     if (data.isPlaying) {
                         player.playVideo();
+                        playInterval = setInterval(() => playCounter++, 1000); // Start the counter
                     } else {
                         player.pauseVideo();
                     }
@@ -125,6 +139,7 @@ function fetchVideoState(Try = 20) {
 socket.on('timeChangeUpdate', (data) => {
     if (data.videoId === currentVideoId) {
         player.seekTo(data.currentTime);
+        playCounter = data.currentTime; // Update the counter to the new time
     }
 });
 
