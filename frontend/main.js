@@ -3,7 +3,8 @@ const socket = io();
 let player;
 let currentVideoId = null;
 let isPlayerReady = false;
-let lastSentTime = 0;
+let lastKnownTime = 0;
+let prevTime = 0; // to detect large seeks
 
 function getYouTubeEmbedLink(url) {
     if (!url) {
@@ -30,144 +31,142 @@ function onYouTubeIframeAPIReady() {
         events: {
             'onReady': onPlayerReady,
             'onStateChange': onPlayerStateChange,
-            'onError': onPlayerError
+            'onError': (e) => console.error('YT error:', e)
         }
     });
 }
 
 function onPlayerReady(event) {
     isPlayerReady = true;
-    fetchVideoState();
+    fetchInitialVideoState();
 }
 
 function onPlayerStateChange(event) {
+    if (!isPlayerReady || !currentVideoId) return;
     const currentTime = player.getCurrentTime();
-    if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.ENDED) {
-        socket.emit('videoState', {
-            videoId: currentVideoId,
-            currentTime: currentTime,
-            isPlaying: false,
-            type: 'pause' // Add type for logging
-        });
-    } else if (event.data === YT.PlayerState.PLAYING) {
-        socket.emit('videoState', {
-            type: 'play',
-            currentTime: player.getCurrentTime(),
-            videoId: player.getVideoData().video_id,
-            isPlaying: true
-        });
+    if (event.data === YT.PlayerState.PLAYING) {
+        // If user pressed Play, tell server
+        socket.emit('playVideo', { videoId: currentVideoId, startTime: currentTime });
+    } else if (event.data === YT.PlayerState.PAUSED) {
+        // If user pressed Pause, tell server
+        socket.emit('pauseVideo', { videoId: currentVideoId, lastKnownTime: currentTime });
+    }
+    // Detect large seek
+    if (Math.abs(currentTime - prevTime) > 1) {
+        socket.emit('seekVideo', { newTime: currentTime });
+    }
+    prevTime = currentTime;
+}
+
+// Retry mechanism to load video
+function loadVideoWithRetry(videoId, startTime, attempts = 20) {
+    if (attempts <= 0) {
+        console.error('Failed to load video after multiple attempts');
+        return;
+    }
+    if (isPlayerReady) {
+        player.loadVideoById(videoId, startTime);
+    } else {
+        setTimeout(() => loadVideoWithRetry(videoId, startTime, attempts - 1), 2000);
     }
 }
 
-// Listen for playback time changes
-function onPlaybackTimeChange() {
-    if (player && typeof player.getCurrentTime === 'function') {
-        const currentTime = player.getCurrentTime();
-        if (Math.abs(currentTime - lastSentTime) > 1) { // Only send if the change is significant
-            lastSentTime = currentTime;
-            socket.emit('timeChange', {
-                videoId: currentVideoId,
-                currentTime: currentTime
-            });
-        }
-    }
+// Fetch initial video state from the database
+function fetchInitialVideoState() {
+    socket.emit('requestInitialState');
 }
 
-// Add event listener for playback time change
-setInterval(onPlaybackTimeChange, 1000); // Check every second
-
-function onPlayerError(event) {
-    console.error('Error occurred:', event);
-}
-
-function saveVideoState(videoId, currentTime, isPlaying) {
-    fetch('/api/videoState', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ videoId, currentTime, isPlaying })
-    });
-}
-
-function isPlayerLoaded() {
-    return player && typeof player.loadVideoById === 'function';
-}
-
-function fetchVideoState(Try = 20) {
-    if (isPlayerLoaded()) {
-        fetch('/api/videoState')
-            .then(response => response.json())
-            .then(data => {
-                if (data && data.videoId) {
-                    currentVideoId = data.videoId;
-                    player.loadVideoById(data.videoId, data.currentTime);
+// Listen for server events
+socket.on('initState', (data) => {
+    console.log('Received initState:', data); // Log the initState data
+    currentVideoId = data.videoId;
+    if (data.videoId) {
+        loadVideoWithRetry(data.videoId, data.currentTime);
+        if (isPlayerReady) {
+            player.seekTo(data.currentTime);
+            if (data.isPlaying) {
+                player.playVideo();
+            } else {
+                player.pauseVideo();
+            }
+        } else {
+            const checkPlayerReady = setInterval(() => {
+                if (isPlayerReady) {
+                    player.seekTo(data.currentTime);
                     if (data.isPlaying) {
                         player.playVideo();
                     } else {
                         player.pauseVideo();
                     }
-                } else {
-                    console.log('No video data found in the database.');
+                    clearInterval(checkPlayerReady);
                 }
-            })
-            .catch(error => {
-                console.error('Error fetching video state:', error);
-            });
-    } else if (Try > 0) {
-        setTimeout(() => fetchVideoState(Try - 1), 2000);
-    } else {
-        console.error('Player is not ready after multiple attempts.');
-    }
-}
-
-// Listen for time change updates from the server
-socket.on('timeChangeUpdate', (data) => {
-    if (data.videoId === currentVideoId) {
-        player.seekTo(data.currentTime);
+            }, 100);
+        }
     }
 });
 
+socket.on('playEvent', (data) => {
+    currentVideoId = data.videoId;
+    const elapsed = (Date.now() - data.serverWallClock) / 1000;
+    if (isPlayerReady) {
+        player.seekTo(data.startTime + elapsed);
+        player.playVideo();
+    } else {
+        const checkPlayerReady = setInterval(() => {
+            if (isPlayerReady) {
+                player.seekTo(data.startTime + elapsed);
+                player.playVideo();
+                clearInterval(checkPlayerReady);
+            }
+        }, 100);
+    }
+});
+
+socket.on('pauseEvent', (data) => {
+    currentVideoId = data.videoId;
+    if (isPlayerReady) {
+        player.seekTo(data.lastKnownTime, true);
+        player.pauseVideo();
+    } else {
+        const checkPlayerReady = setInterval(() => {
+            if (isPlayerReady) {
+                player.seekTo(data.lastKnownTime, true);
+                player.pauseVideo();
+                clearInterval(checkPlayerReady);
+            }
+        }, 100);
+    }
+});
+
+socket.on('seekEvent', (data) => {
+    currentVideoId = data.videoId;
+    if (isPlayerReady) {
+        // If playing, we have serverWallClock
+        if (data.serverWallClock) {
+            const elapsed = (Date.now() - data.serverWallClock) / 1000;
+            player.seekTo(data.newTime + elapsed, true);
+        } else {
+            // If paused
+            player.seekTo(data.newTime, true);
+        }
+    }
+});
+
+// Simple loadVideo button
 document.getElementById('loadVideo').addEventListener('click', () => {
     const url = document.getElementById('videoUrl').value;
-    const videoId = getYouTubeEmbedLink(url);
+    const videoId = extractYouTubeId(url);
     if (videoId) {
         currentVideoId = videoId;
-        player.loadVideoById(videoId);
-        saveVideoState(videoId, 0, true);
-        socket.emit('update-video', { videoId, currentTime: 0, isPlaying: true });
+        loadVideoWithRetry(videoId, 0);
+        socket.emit('playVideo', { videoId, startTime: 0 });
     }
 });
 
-socket.on('video-state', (data) => {
-    if (data.videoId) {
-        currentVideoId = data.videoId;
-        player.loadVideoById(data.videoId, data.currentTime);
-        if (data.isPlaying) {
-            player.playVideo();
-        } else {
-            player.pauseVideo();
-        }
-    }
-});
-
-// Socket events
-socket.on('videoStateUpdate', (data) => {
-    if (!isPlayerReady) return;
-    
-    if (data.videoId !== currentVideoId) {
-        loadVideo(data.videoId, data.currentTime);
-    } else {
-        if (data.isPlaying) {
-            player.seekTo(data.currentTime);
-            player.playVideo();
-        } else {
-            player.pauseVideo();
-        }
-    }
-});
-
-// Add socket listeners for logs
-socket.on('videoStateLog', (message) => {
-    console.log(`[TogetherTube] ${message}`);
-});
+// Minimal ID extraction
+function extractYouTubeId(url) {
+    try {
+        const parsed = new URL(url);
+        return parsed.searchParams.get('v') || parsed.pathname.replace('/', '');
+    } catch { return null; }
+}
