@@ -98,9 +98,11 @@ socket.on('initState', (data) => {
 });
 
 socket.on('playEvent', (data) => {
-    currentVideoId = data.videoId;
-    const elapsed = (Date.now() - data.serverWallClock) / 1000;
-    loadVideoWithRetry(data.videoId, data.startTime + elapsed);
+    if (currentVideoId !== data.videoId) {
+        currentVideoId = data.videoId;
+        const elapsed = (Date.now() - data.serverWallClock) / 1000;
+        loadVideoWithRetry(data.videoId, data.startTime + elapsed);
+    }
     if (data.isPlaying && isPlayerReady) {
         player.playVideo();
     }
