@@ -38,7 +38,7 @@ function onYouTubeIframeAPIReady() {
 
 function onPlayerReady(event) {
     isPlayerReady = true;
-    // Optionally fetch initial state (or rely on 'initState' from server)
+    fetchInitialVideoState();
 }
 
 function onPlayerStateChange(event) {
@@ -58,19 +58,41 @@ function onPlayerStateChange(event) {
     prevTime = currentTime;
 }
 
+// Retry mechanism to load video
+function loadVideoWithRetry(videoId, startTime, attempts = 20) {
+    if (attempts <= 0) {
+        console.error('Failed to load video after multiple attempts');
+        return;
+    }
+    if (isPlayerReady) {
+        player.loadVideoById(videoId, startTime);
+    } else {
+        setTimeout(() => loadVideoWithRetry(videoId, startTime, attempts - 1), 2000);
+    }
+}
+
+// Fetch initial video state from the database
+function fetchInitialVideoState() {
+    socket.emit('requestInitialState');
+}
+
 // Listen for server events
 socket.on('initState', (data) => {
     currentVideoId = data.videoId;
     if (data.videoId) {
-        player.loadVideoById(data.videoId, data.currentTime);
+        loadVideoWithRetry(data.videoId, data.currentTime);
         if (data.isPlaying) {
             // Calculate offset
             const elapsed = (Date.now() - data.serverWallClock) / 1000;
-            player.seekTo(data.currentTime + elapsed);
-            player.playVideo();
+            if (isPlayerReady) {
+                player.seekTo(data.currentTime + elapsed);
+                player.playVideo();
+            }
         } else {
-            player.seekTo(data.currentTime);
-            player.pauseVideo();
+            if (isPlayerReady) {
+                player.seekTo(data.currentTime);
+                player.pauseVideo();
+            }
         }
     }
 });
@@ -78,26 +100,31 @@ socket.on('initState', (data) => {
 socket.on('playEvent', (data) => {
     currentVideoId = data.videoId;
     const elapsed = (Date.now() - data.serverWallClock) / 1000;
-    player.loadVideoById(data.videoId);
-    player.seekTo(data.startTime + elapsed, true);
-    player.playVideo();
+    loadVideoWithRetry(data.videoId, data.startTime + elapsed);
+    if (data.isPlaying && isPlayerReady) {
+        player.playVideo();
+    }
 });
 
 socket.on('pauseEvent', (data) => {
     currentVideoId = data.videoId;
-    player.seekTo(data.lastKnownTime, true);
-    player.pauseVideo();
+    if (isPlayerReady) {
+        player.seekTo(data.lastKnownTime, true);
+        player.pauseVideo();
+    }
 });
 
 socket.on('seekEvent', (data) => {
     currentVideoId = data.videoId;
-    // If playing, we have serverWallClock
-    if (data.serverWallClock) {
-        const elapsed = (Date.now() - data.serverWallClock) / 1000;
-        player.seekTo(data.newTime + elapsed, true);
-    } else {
-        // If paused
-        player.seekTo(data.newTime, true);
+    if (isPlayerReady) {
+        // If playing, we have serverWallClock
+        if (data.serverWallClock) {
+            const elapsed = (Date.now() - data.serverWallClock) / 1000;
+            player.seekTo(data.newTime + elapsed, true);
+        } else {
+            // If paused
+            player.seekTo(data.newTime, true);
+        }
     }
 });
 
@@ -107,7 +134,7 @@ document.getElementById('loadVideo').addEventListener('click', () => {
     const videoId = extractYouTubeId(url);
     if (videoId) {
         currentVideoId = videoId;
-        player.loadVideoById(videoId, 0);
+        loadVideoWithRetry(videoId, 0);
         socket.emit('playVideo', { videoId, startTime: 0 });
     }
 });
