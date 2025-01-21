@@ -49,7 +49,7 @@ function onPlayerStateChange(event) {
         socket.emit('playVideo', { videoId: currentVideoId, startTime: currentTime });
     } else if (event.data === YT.PlayerState.PAUSED) {
         // If user pressed Pause, tell server
-        socket.emit('pauseVideo');
+        socket.emit('pauseVideo', { videoId: currentVideoId, lastKnownTime: currentTime });
     }
     // Detect large seek
     if (Math.abs(currentTime - prevTime) > 1) {
@@ -82,30 +82,43 @@ socket.on('initState', (data) => {
     currentVideoId = data.videoId;
     if (data.videoId) {
         loadVideoWithRetry(data.videoId, data.currentTime);
-        if (data.isPlaying) {
-            // Calculate offset
-            const elapsed = (Date.now() - data.serverWallClock) / 1000;
-            if (isPlayerReady) {
-                player.seekTo(data.currentTime + elapsed);
+        if (isPlayerReady) {
+            player.seekTo(data.currentTime);
+            if (data.isPlaying) {
                 player.playVideo();
-            }
-        } else {
-            if (isPlayerReady) {
-                player.seekTo(data.currentTime);
+            } else {
                 player.pauseVideo();
             }
+        } else {
+            const checkPlayerReady = setInterval(() => {
+                if (isPlayerReady) {
+                    player.seekTo(data.currentTime);
+                    if (data.isPlaying) {
+                        player.playVideo();
+                    } else {
+                        player.pauseVideo();
+                    }
+                    clearInterval(checkPlayerReady);
+                }
+            }, 100);
         }
     }
 });
 
 socket.on('playEvent', (data) => {
-    if (currentVideoId !== data.videoId) {
-        currentVideoId = data.videoId;
-        const elapsed = (Date.now() - data.serverWallClock) / 1000;
-        loadVideoWithRetry(data.videoId, data.startTime + elapsed);
-    }
-    if (data.isPlaying && isPlayerReady) {
+    currentVideoId = data.videoId;
+    const elapsed = (Date.now() - data.serverWallClock) / 1000;
+    if (isPlayerReady) {
+        player.seekTo(data.startTime + elapsed);
         player.playVideo();
+    } else {
+        const checkPlayerReady = setInterval(() => {
+            if (isPlayerReady) {
+                player.seekTo(data.startTime + elapsed);
+                player.playVideo();
+                clearInterval(checkPlayerReady);
+            }
+        }, 100);
     }
 });
 
@@ -114,6 +127,14 @@ socket.on('pauseEvent', (data) => {
     if (isPlayerReady) {
         player.seekTo(data.lastKnownTime, true);
         player.pauseVideo();
+    } else {
+        const checkPlayerReady = setInterval(() => {
+            if (isPlayerReady) {
+                player.seekTo(data.lastKnownTime, true);
+                player.pauseVideo();
+                clearInterval(checkPlayerReady);
+            }
+        }, 100);
     }
 });
 
