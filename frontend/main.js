@@ -1,5 +1,7 @@
 // frontend/main.js
 const socket = io();
+const LATENCY_THRESHOLD = 1.5; // Allowable latency in seconds
+
 let player;
 let currentVideoId = null;
 let isPlayerReady = false;
@@ -164,13 +166,13 @@ socket.on('seekEvent', (data) => {
         // If playing, we have serverWallClock
         if (data.serverWallClock) {
             const elapsed = (Date.now() - data.serverWallClock) / 1000;
-            if (Math.abs(player.getCurrentTime() - (data.newTime + elapsed)) > 1) {
+            if (Math.abs(player.getCurrentTime() - (data.newTime + elapsed)) > LATENCY_THRESHOLD) {
                 isRemoteUpdate = true;
                 player.seekTo(data.newTime + elapsed, true);
             }
         } else {
             // If paused
-            if (Math.abs(player.getCurrentTime() - data.newTime) > 1) {
+            if (Math.abs(player.getCurrentTime() - data.newTime) > LATENCY_THRESHOLD) {
                 isRemoteUpdate = true;
                 player.seekTo(data.newTime, true);
             }
