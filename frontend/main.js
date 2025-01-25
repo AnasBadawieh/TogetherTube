@@ -60,7 +60,8 @@ function onPlayerStateChange(event) {
     if (event.data === YT.PlayerState.PLAYING) {
         socket.emit('playVideo', { videoId: currentVideoId, startTime: currentTime });
     } else if (event.data === YT.PlayerState.PAUSED) {
-        socket.emit('pauseVideo');
+        // If user pressed Pause, tell server
+        socket.emit('pauseVideo', { videoId: currentVideoId, lastKnownTime: currentTime });
     }
 
     // If user scrubs significantly
@@ -119,21 +120,14 @@ socket.on('initState', (data) => {
 });
 
 socket.on('playEvent', (data) => {
-    if (currentVideoId !== data.videoId) {
-        currentVideoId = data.videoId;
-        const elapsed = (Date.now() - data.serverWallClock) / 1000;
-        loadVideoWithRetry(data.videoId, data.startTime + elapsed);
-    }
+    currentVideoId = data.videoId;
+    const elapsed = (Date.now() - data.serverWallClock) / 1000;
     if (isPlayerReady) {
-        const elapsed = (Date.now() - data.serverWallClock) / 1000;
-        isRemoteUpdate = true;
         player.seekTo(data.startTime + elapsed);
         player.playVideo();
     } else {
         const checkPlayerReady = setInterval(() => {
             if (isPlayerReady) {
-                const elapsed = (Date.now() - data.serverWallClock) / 1000;
-                isRemoteUpdate = true;
                 player.seekTo(data.startTime + elapsed);
                 player.playVideo();
                 clearInterval(checkPlayerReady);
@@ -151,7 +145,6 @@ socket.on('pauseEvent', (data) => {
     } else {
         const checkPlayerReady = setInterval(() => {
             if (isPlayerReady) {
-                isRemoteUpdate = true;
                 player.seekTo(data.lastKnownTime, true);
                 player.pauseVideo();
                 clearInterval(checkPlayerReady);
