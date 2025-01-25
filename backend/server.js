@@ -67,8 +67,8 @@ io.on('connection', (socket) => {
       { upsert: true }
     );
 
-    // Broadcast
-    io.emit('playEvent', {
+    // Broadcast to all clients except the sender
+    socket.broadcast.emit('playEvent', {
       videoId: masterState.videoId,
       startTime: masterState.lastKnownTime,
       serverWallClock: masterState.startWallClock
@@ -92,10 +92,11 @@ io.on('connection', (socket) => {
       { upsert: true }
     );
 
-    // Broadcast pause
-    io.emit('pauseEvent', {
+    // Broadcast pause to all clients except the sender
+    socket.broadcast.emit('pauseEvent', {
       videoId: masterState.videoId,
-      lastKnownTime: masterState.lastKnownTime
+      lastKnownTime: masterState.lastKnownTime,
+      serverWallClock: masterState.startWallClock
     });
   });
 
@@ -106,14 +107,14 @@ io.on('connection', (socket) => {
     masterState.startWallClock = Date.now(); // if still playing, it starts from newTime
     if (masterState.isPlaying) {
       // If still playing, we effectively "play" from the new time
-      io.emit('seekEvent', {
+      socket.broadcast.emit('seekEvent', {
         videoId: masterState.videoId,
         newTime: masterState.lastKnownTime,
         serverWallClock: masterState.startWallClock
       });
     } else {
       // If paused, just store the new time
-      io.emit('seekEvent', { 
+      socket.broadcast.emit('seekEvent', { 
         videoId: masterState.videoId, 
         newTime: masterState.lastKnownTime 
       });
