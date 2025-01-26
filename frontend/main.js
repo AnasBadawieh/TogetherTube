@@ -15,12 +15,12 @@ let isRemoteUpdate = false;
 // YouTube Link
 function getYouTubeEmbedLink(url) {
     if (!url) {
-        console.error('Invalid URL');
+        alert('Please enter a YouTube URL');
         return null;
     }
     const videoId = url.split('v=')[1];
     if (!videoId) {
-        console.error('Invalid YouTube URL');
+        alert('Invalid YouTube URL');
         return null;
     }
     const ampersandPosition = videoId.indexOf('&');
@@ -73,13 +73,12 @@ function onPlayerStateChange(event) {
 // Retry mechanism to load player with video
 function loadVideoWithRetry(videoId, startTime, attempts = 20) {
     if (attempts <= 0) {
-        console.error('Failed to load video after multiple attempts');
+        alert('Failed to load video, please reload page');
         return;
     }
     if (isPlayerReady) {
-        console.log(`Loading video ${videoId} at ${startTime}`);
         player.loadVideoById(videoId);
-        setTimeout(() => player.seekTo(startTime), 1000);
+        setTimeout(() => player.seekTo(startTime), 500); // Your timeout to fix the time jump
     } else {
         setTimeout(() => loadVideoWithRetry(videoId, startTime, attempts - 1), 2000);
     }
@@ -93,30 +92,21 @@ function fetchInitialVideoState() {
 
 // Listen for server events
 socket.on('initState', (data) => {
-    console.log('Received initState:', data); // Log the initState data
     currentVideoId = data.videoId;
     if (data.videoId) {
         loadVideoWithRetry(data.videoId, data.currentTime);
         if (isPlayerReady) {
-            console.log(`Seeking to ${data.currentTime}`);
-            player.seekTo(data.currentTime);
             if (data.isPlaying) {
-                console.log('Playing video');
                 player.playVideo();
             } else {
-                console.log('Pausing video');
                 player.pauseVideo();
             }
         } else {
             const checkPlayerReady = setInterval(() => {
                 if (isPlayerReady) {
-                    console.log(`Seeking to ${data.currentTime} after player is ready`);
-                    player.seekTo(data.currentTime);
                     if (data.isPlaying) {
-                        console.log('Playing video');
                         player.playVideo();
                     } else {
-                        console.log('Pausing video');
                         player.pauseVideo();
                     }
                     clearInterval(checkPlayerReady);
