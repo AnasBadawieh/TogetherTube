@@ -78,7 +78,8 @@ function loadVideoWithRetry(videoId, startTime, attempts = 20) {
     }
     if (isPlayerReady) {
         console.log(`Loading video ${videoId} at ${startTime}`);
-        player.loadVideoById(videoId, startTime);
+        player.loadVideoById(videoId);
+        setTimeout(() => player.seekTo(startTime), 1000);
     } else {
         setTimeout(() => loadVideoWithRetry(videoId, startTime, attempts - 1), 2000);
     }
@@ -95,7 +96,7 @@ socket.on('initState', (data) => {
     console.log('Received initState:', data); // Log the initState data
     currentVideoId = data.videoId;
     if (data.videoId) {
-        loadVideoWithRetry(data.videoId, 90);
+        loadVideoWithRetry(data.videoId, data.currentTime);
         if (isPlayerReady) {
             console.log(`Seeking to ${data.currentTime}`);
             player.seekTo(data.currentTime);
