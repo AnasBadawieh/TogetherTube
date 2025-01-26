@@ -1,15 +1,18 @@
 // frontend/main.js
-const socket = io();
-const LATENCY_THRESHOLD = 1.5; // Allowable latency in seconds
 
+// Imports and Variables
+const socket = io();
+const LATENCY_THRESHOLD = 1.5; 
 let player;
 let currentVideoId = null;
 let isPlayerReady = false;
 let lastKnownTime = 0;
-let prevTime = 0; // to detect large seeks
+let prevTime = 0; 
 let debounceSeek = false;
 let isRemoteUpdate = false;
 
+
+// YouTube Link
 function getYouTubeEmbedLink(url) {
     if (!url) {
         console.error('Invalid URL');
@@ -27,6 +30,8 @@ function getYouTubeEmbedLink(url) {
     return videoId;
 }
 
+
+// YouTube Player
 function onYouTubeIframeAPIReady() {
     player = new YT.Player('player', {
         height: '390',
@@ -45,42 +50,37 @@ function onPlayerReady(event) {
     fetchInitialVideoState();
 }
 
+
+//player state change
 function onPlayerStateChange(event) {
     if (!isPlayerReady || !currentVideoId) return;
-
-    // If this state change is coming from a remote command,
-    // do NOT emit anything back to the server
-    if (isRemoteUpdate) {
-        isRemoteUpdate = false; // reset for next time
-        return;
-    }
-
-    // Otherwise, it's a local user action (user pressed play/pause or scrubbed)
     const currentTime = player.getCurrentTime();
-    if (event.data === YT.PlayerState.PLAYING) {
-        socket.emit('playVideo', { videoId: currentVideoId, startTime: currentTime });
-    } else if (event.data === YT.PlayerState.PAUSED) {
-        // If user pressed Pause, tell server
-        socket.emit('pauseVideo', { videoId: currentVideoId, lastKnownTime: currentTime });
+    if (!isRemoteUpdate) {
+        if (event.data === YT.PlayerState.PLAYING) {
+            socket.emit('playVideo', { videoId: currentVideoId, startTime: currentTime });
+        } else if (event.data === YT.PlayerState.PAUSED) {
+            socket.emit('pauseVideo', { videoId: currentVideoId, lastKnownTime: currentTime });
+        }
+        if (Math.abs(currentTime - prevTime) > 1) {
+            socket.emit('seekVideo', { newTime: currentTime });
+        }
+    } else {
+        isRemoteUpdate = false;
     }
-
-    // If user scrubs significantly
-    if (Math.abs(currentTime - prevTime) > 1) {
-        socket.emit('seekVideo', { newTime: currentTime });
-    }
-
     prevTime = currentTime;
 }
 
-// Retry mechanism to load video
+// Retry mechanism to load player with video
 function loadVideoWithRetry(videoId, startTime, attempts = 20) {
     if (attempts <= 0) {
         console.error('Failed to load video after multiple attempts');
         return;
     }
-    if (isPlayerReady) {
+    // Only load if player is ready and video is different
+    if (isPlayerReady && player.getVideoData().video_id !== videoId) {
+        console.log(`Loading video ${videoId} at ${startTime}`);
         player.loadVideoById(videoId, startTime);
-    } else {
+    } else if (!isPlayerReady) {
         setTimeout(() => loadVideoWithRetry(videoId, startTime, attempts - 1), 2000);
     }
 }
@@ -90,6 +90,7 @@ function fetchInitialVideoState() {
     socket.emit('requestInitialState');
 }
 
+
 // Listen for server events
 socket.on('initState', (data) => {
     console.log('Received initState:', data); // Log the initState data
@@ -97,19 +98,25 @@ socket.on('initState', (data) => {
     if (data.videoId) {
         loadVideoWithRetry(data.videoId, data.currentTime);
         if (isPlayerReady) {
+            console.log(`Seeking to ${data.currentTime}`);
             player.seekTo(data.currentTime);
             if (data.isPlaying) {
+                console.log('Playing video');
                 player.playVideo();
             } else {
+                console.log('Pausing video');
                 player.pauseVideo();
             }
         } else {
             const checkPlayerReady = setInterval(() => {
                 if (isPlayerReady) {
+                    console.log(`Seeking to ${data.currentTime} after player is ready`);
                     player.seekTo(data.currentTime);
                     if (data.isPlaying) {
+                        console.log('Playing video');
                         player.playVideo();
                     } else {
+                        console.log('Pausing video');
                         player.pauseVideo();
                     }
                     clearInterval(checkPlayerReady);
@@ -119,6 +126,8 @@ socket.on('initState', (data) => {
     }
 });
 
+
+//listen for play, pause, and seek events
 socket.on('playEvent', (data) => {
     currentVideoId = data.videoId;
     const elapsed = (Date.now() - data.serverWallClock) / 1000;
@@ -173,16 +182,20 @@ socket.on('seekEvent', (data) => {
     }
 });
 
+
+
 // Simple loadVideo button
 document.getElementById('loadVideo').addEventListener('click', () => {
     const url = document.getElementById('videoUrl').value;
     const videoId = extractYouTubeId(url);
-    if (videoId) {
+    if (videoId && videoId !== currentVideoId) {
         currentVideoId = videoId;
         loadVideoWithRetry(videoId, 0);
         socket.emit('playVideo', { videoId, startTime: 0 });
     }
 });
+
+
 
 // Minimal ID extraction
 function extractYouTubeId(url) {
